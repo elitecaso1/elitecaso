@@ -15,13 +15,13 @@ NAME = "short2"
 opts = C.cli()
 C.reset()
 sc = C.setup(NAME, 30, opts["preview"])
-C.world((0.004, 0.005, 0.009), 1.0, fog=0.004, fog_color=(0.55, 0.6, 0.7), top=(0.01, 0.012, 0.025))
+C.world_hdri("moonless_golf_1k.hdr", 0.5, 0.0, fog=0.004, fog_color=(0.55, 0.6, 0.7), color=(0.004, 0.005, 0.009), top=(0.01, 0.012, 0.025))
 F = C.f
 
 # --------------------------------------------------------------- city block
 main = C.Path("main_road", [(0, -320, 0), (0, 0, 0), (0, 400, 0), (0, 900, 0)])
 STOP = main.nearest((0, 0, 0))                      # stop line at y = 0
-asphalt = C.mat("asphalt", (0.018, 0.018, 0.02), 0.0, 0.35)
+asphalt = C.surface("asphalt", (0.014, 0.014, 0.015), (0.035, 0.035, 0.037), (0.15, 0.6), 0.15, 0.06, 40, puddles=True)
 paint = C.mat("paint", (0.85, 0.85, 0.8), 0.0, 0.5)
 C.road("main", main, 14.0, asphalt)
 for lat in (-3.5, 3.5):
@@ -31,10 +31,10 @@ C.box("cross_road", (600, 14, 0.04), (0, 20, -0.01), asphalt)
 C.box("stop_line", (14, 0.5, 0.03), (0, 0.4, 0.03), paint)
 for i in range(10):                                  # zebra crossing
     C.box(f"zebra{i}", (0.8, 4.0, 0.03), (-6.3 + i * 1.4, 4.0, 0.03), paint)
-C.box("ground", (1200, 1600, 0.2), (0, 300, -0.35), C.mat("pavement", (0.03, 0.03, 0.032), 0, 0.8))
+C.box("ground", (1200, 1600, 0.2), (0, 300, -0.35), C.surface("pavement", (0.03, 0.03, 0.032), (0.06, 0.06, 0.06), (0.5, 0.9), 0.2, 0.1, 10))
 
 # buildings with lit windows on all four corners
-wall = C.mat("building", (0.02, 0.022, 0.026), 0.1, 0.7)
+wall = C.surface("building", (0.02, 0.022, 0.026), (0.05, 0.05, 0.055), (0.5, 0.9), 0.3, 0.2, 6)
 window_on = C.glow("window_on", (1.0, 0.75, 0.45), 4.0)
 window_blue = C.glow("window_blue", (0.4, 0.6, 1.0), 3.0)
 for bx in (-1, 1):
@@ -56,6 +56,10 @@ for i, (x, y) in enumerate(((-8.5, -30), (8.5, -30), (-8.5, 30), (8.5, 30), (-8.
     C.box(f"pole{i}", (0.18, 0.18, 9), (x, y, 4.5), wall)
     C.box(f"lamp{i}", (1.2, 0.4, 0.15), (x * 0.85, y, 9), lamp_m)
     C.light(f"lamp_light{i}", "SPOT", 6000, (x * 0.85, y, 8.8), (1.0, 0.6, 0.28), 0.4, spot=1.6)
+
+# overhead lights over the stop line so the line-up reads
+for i, x in enumerate((-6.5, 0.0, 6.5)):
+    C.light(f"stop_light{i}", "SPOT", 9000, (x, -5, 10), (1.0, 0.7, 0.45), 0.6, spot=1.4)
 
 # fog bank the GHOST drives out of
 C.fog_box("fog_bank", (30, 160, 8), (0, -110, 4), 0.25, (0.6, 0.65, 0.72), True, 0.08)
@@ -124,9 +128,9 @@ for nm, car in cars.items():
                 (0.75, 0.75, 0.78), (sx * 1.5, -3, 1.2), 0.9, 60, 0.12, 0.5)
 
 # --------------------------------------------------------------- shots
-c1 = C.camera("cam1_signal", (0.6, 3.0, 4.6), (0.6, 6.5, 4.8), 50)
+c1 = C.camera("cam1_signal", (0.6, 3.0, 5.0), (0.6, 6.5, 5.05), 35)
 C.cut(c1, 0)                                                       # 1 "3" close-up
-C.cut(C.camera("cam2_front", (0, 13, 0.6), (0, -3, 0.9), 24), 3)   # 2 line-up, idling
+C.cut(C.camera("cam2_front", (-3.5, 13, 0.7), (-1, -3, 0.9), 24), 3)   # 2 line-up, idling
 ch = cars["charger"].root
 C.cut(C.camera("cam3_rear", (0.6, -4.6, 0.45), (0.5, -2.5, 0.35), 28, ch), 7)     # 3 "2", exhaust
 C.cut(C.camera("cam4_top", (-1.75, -45, 70), (-1.75, -35, 0), 30), 10)              # 4 GHOST out of fog
@@ -134,6 +138,8 @@ YW = main.point(WAIT).y
 c5 = C.camera("cam5_push", (16, YW, 1.3), (0, YW, 1.1), 35)                            # 5 "1", push-in
 C.key(c5, "location", [(F(14), (16, YW, 1.3)), (F(17), (8.5, YW, 1.2))])
 C.cut(c5, 14)
+wheel_fill = C.light("wheel_fill", "AREA", 0, (-2.6, -1.4, 1.2), (1.0, 0.75, 0.55), 1.5, (0, -1.0, 0), ch)
+C.key(wheel_fill.data, "energy", [(F(16.9), 0), (F(17), 120), (F(20), 120), (F(20.1), 0)], "CONSTANT")
 C.cut(C.camera("cam6_wheel", (-2.2, -2.6, 0.45), (-0.95, -1.55, 0.36), 24, ch), 17)  # 6 green, wheels
 C.cut(C.camera("cam7_drone", (1.75, -26, 9), (1.75, 12, 0), 30, g.root), 20)          # 7 race, GHOST ahead
 C.cut(c1, 26)                                                                         # 8 red again, loop

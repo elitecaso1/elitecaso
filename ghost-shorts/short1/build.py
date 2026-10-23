@@ -14,22 +14,22 @@ NAME = "short1"
 opts = C.cli()
 C.reset()
 sc = C.setup(NAME, 35, opts["preview"])
-C.world((0.003, 0.004, 0.008), 1.0, top=(0.010, 0.014, 0.028))
+C.world_hdri("moonless_golf_1k.hdr", 0.5, 1.2, color=(0.003, 0.004, 0.008), top=(0.010, 0.014, 0.028))
 C.sun(0.06, (1.1, 0.0, 0.9), (0.6, 0.7, 1.0))           # moonlight
 
 # --------------------------------------------------------------- world
 road_path = C.Path("highway", [(0, -100, 0), (0, 300, 0), (60, 700, 0), (-40, 1100, 0),
                                (0, 1450, 0), (0, 1700, 0), (0, 1950, 0)])
 T_IN, T_OUT = 1480.0, 1660.0                            # tunnel span (metres along road)
-asphalt = C.mat("asphalt_wet", (0.012, 0.012, 0.013), 0.0, 0.12)
+asphalt = C.surface("asphalt_wet", (0.010, 0.010, 0.011), (0.028, 0.028, 0.03), (0.03, 0.4), 0.15, 0.08, 40, puddles=True)
 paint = C.mat("lane_paint", (0.8, 0.8, 0.75), 0.0, 0.5)
 C.road("road", road_path, 8.0, asphalt)
 C.dashes("center_line", road_path, 0.0, 12, 4, 0.15, paint)
 for side in (-1, 1):
     C.dashes(f"edge_line{side}", road_path, side * 3.85, 1.0, 1.0, 0.12, paint)
 
-ground = C.mat("ground", (0.015, 0.018, 0.014), 0.0, 0.9)
-concrete = C.mat("concrete", (0.12, 0.12, 0.12), 0.0, 0.8)
+ground = C.surface("ground", (0.012, 0.016, 0.010), (0.03, 0.028, 0.02), (0.6, 0.95), 0.4, 0.02, 3)
+concrete = C.surface("concrete", (0.09, 0.09, 0.088), (0.16, 0.155, 0.15), (0.5, 0.9), 0.2, 0.3, 12)
 
 
 C.corridor_terrain("terrain", road_path, 900, 2300, 90, 230, (0, 900), flat=16, ramp=140, hmax=55, m=ground)
@@ -73,7 +73,7 @@ for k, (m, lt) in enumerate(reversed(strips)):
 # --------------------------------------------------------------- cars
 charger = C.Car("charger", "charger")
 ghost = C.Car("ghost", "ghost", head_color=(1.0, 0.02, 0.02), head_on=False, spots=False)
-ghost.rim_light(120)
+ghost.rim_light(30)
 F = C.f
 charger.drive(road_path, [(F(0), 200), (F(3), 320), (F(7), 500), (F(11), 700), (F(16), 950),
                           (F(21), 1200), (F(26), 1375), (F(31), 1500), (F(35), 1600)], lane=1.9)
@@ -97,25 +97,23 @@ C.needle(pivot, [(F(7), 148), (F(8.5), 160), (F(10), 176), (F(10.6), 182), (F(11
 # --------------------------------------------------------------- shots
 # 1 0:00–0:03  mirror close-up, two red lights appear
 c1 = C.camera("cam1_mirror", (-1.15, 0.9, 1.0), (-1.6, -60, 1.0), 85, charger.root)
-frame_m = C.mat("mirror_frame", (0.01, 0.01, 0.01), 0.3, 0.4)
-for nm, loc, size in (("top", (0, 0.062, -0.3), (0.12, 0.03, 0.002)), ("bot", (0, -0.062, -0.3), (0.12, 0.03, 0.002)),
-                      ("l", (-0.05, 0, -0.3), (0.03, 0.15, 0.002)), ("r", (0.05, 0, -0.3), (0.03, 0.15, 0.002))):
-    C.box("mirror_" + nm, size, loc, frame_m, parent=c1)
 C.cut(c1, 0)
 # 2 0:03–0:07  drone behind and above
 C.cut(C.camera("cam2_drone", (0, -16, 7), (0, 8, 0), 28, charger.root), 3)
 # 3 0:07–0:11  speedometer to 180
-c3 = C.camera("cam3_dash", (DASH[0] + 0.15, -1.3, 0.1), DASH, 50)
+c3 = C.camera("cam3_dash", (DASH[0] + 0.25, -2.4, 0.1), DASH, 35)
 C.shake(c3, 0.004, 2, F(7), F(11))
 C.cut(c3, 7)
 # 4 0:11–0:16  road level, GHOST closes in without lights
 C.cut(C.camera("cam4_low", (1.0, -3.2, 0.35), ghost.root, 35, charger.root), 11)
 # 5 0:16–0:21  side tracking, tinted window, nobody inside
+key5 = C.light("ghost_side_key", "AREA", 0, (-3.5, 0.5, 2.2), (0.6, 0.7, 1.0), 3.0, (0, -1.0, 0), ghost.root)
+C.key(key5.data, "energy", [(F(15.9), 0), (F(16), 260), (F(21), 260), (F(21.1), 0)], "CONSTANT")
 C.cut(C.camera("cam5_side", (-4.5, 0.8, 1.1), (0, 0, 0.9), 35, ghost.root), 16)
 # 6 0:21–0:26  front wide, GHOST pulls away, spray over the Charger
 C.cut(C.camera("cam6_front", (-1.0, 18, 1.6), (0, 0, 0.6), 28, charger.root), 21)
 # 7 0:26–0:31  outside the tunnel, lights die one by one
-C.cut(C.camera("cam7_tunnel", tuple(road_path.point(1440, 9, 2.2)), tuple(road_path.point(1500, 0, 3)), 35), 26)
+C.cut(C.camera("cam7_tunnel", tuple(road_path.point(1440, -9, 2.2)), tuple(road_path.point(1500, 0, 3)), 35), 26)
 # 8 0:31–0:35  other end: empty road + title
 c8 = C.camera("cam8_exit", tuple(road_path.point(1705, 1.5, 1.6)), tuple(road_path.point(1660, 0, 2.6)), 35)
 C.cut(c8, 31)

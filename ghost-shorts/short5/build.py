@@ -16,7 +16,7 @@ NAME = "short5"
 opts = C.cli()
 C.reset()
 sc = C.setup(NAME, 45, opts["preview"])
-C.world((0.95, 0.5, 0.25), 0.8, fog=0.0015, fog_color=(1.0, 0.7, 0.45), top=(0.12, 0.2, 0.42))
+C.world_hdri("venice_sunset_1k.hdr", 1.0, 0.0, fog=0.0015, fog_color=(1.0, 0.7, 0.45), color=(0.95, 0.5, 0.25), top=(0.12, 0.2, 0.42))
 C.sun(4.5, (1.42, 0.0, 2.6), (1.0, 0.72, 0.48))          # low sunset sun
 F = C.f
 
@@ -25,8 +25,8 @@ DECK_END, FAR_DECK = 1000.0, 1075.0                       # broken bridge: 75 m 
 DEPTH = -150.0
 
 # --------------------------------------------------------------- desert + canyon
-sand = C.mat("sand", (0.62, 0.38, 0.2), 0.0, 0.9)
-rock = C.mat("canyon_rock", (0.32, 0.14, 0.07), 0.0, 0.85)
+sand = C.surface("sand", (0.5, 0.3, 0.15), (0.68, 0.44, 0.25), (0.75, 0.95), 0.2, 0.01, 6)
+rock = C.surface("canyon_rock", (0.22, 0.09, 0.045), (0.42, 0.2, 0.1), (0.6, 0.95), 0.6, 0.04, 3)
 
 
 def ground(x, y):
@@ -48,12 +48,12 @@ for y0 in (NEAR, FAR):                                     # visible rock faces 
 # --------------------------------------------------------------- road + broken bridge
 ROAD = [(0, -600, 0), (0, 200, 0), (0, 700, 0), (0, 940, 0), (0, 990, 0), (0, 1000, 1.2)]
 road_path = C.Path("desert_road", ROAD)
-asphalt = C.mat("asphalt", (0.05, 0.045, 0.04), 0.0, 0.6)
+asphalt = C.surface("asphalt", (0.04, 0.035, 0.03), (0.09, 0.075, 0.06), (0.5, 0.85), 0.2, 0.05, 40)
 paint = C.mat("paint", (0.85, 0.75, 0.4), 0.0, 0.5)
 d_near = road_path.nearest((0, NEAR, 0))
 C.road("road", road_path, 8.0, asphalt, 0, d_near)
 C.dashes("center", road_path, 0.0, 12, 4, 0.15, paint, 0, d_near)
-concrete = C.mat("bridge_concrete", (0.4, 0.36, 0.32), 0.0, 0.8)
+concrete = C.surface("bridge_concrete", (0.3, 0.27, 0.24), (0.45, 0.41, 0.36), (0.6, 0.95), 0.3, 0.3, 10)
 C.loft("deck_near", road_path, [(-4.6, -0.8), (-4.6, 0.0), (4.6, 0.0), (4.6, -0.8), (-4.6, -0.8)],
        d_near - 2, road_path.length, 1.0, concrete)
 C.box("deck_far", (9.2, FAR + 5 - FAR_DECK, 0.8), (0, (FAR + 5 + FAR_DECK) / 2, -0.4), concrete)
@@ -123,7 +123,7 @@ c1 = C.camera("cam1_gap", cam1_loc, (0, 1037, 0), 24)                           
 C.key(c1, "location", [(F(0), cam1_loc), (F(4), (30, 1006, 43))])
 C.cut(c1, 0)
 C.cut(C.camera("cam2_side", (-26, 4, 3.0), (2, 0, 0.8), 35, ghost.root), 4)              # 2 two cars, dust
-C.cut(C.camera("cam3_dash", (DASH[0] + 0.1, -1.3, 0.05), DASH, 50), 10)                  # 3 160 km/h
+C.cut(C.camera("cam3_dash", (DASH[0] + 0.2, -2.4, 0.05), DASH, 35), 10)                  # 3 160 km/h
 C.cut(C.camera("cam4_pov", (0.4, 2.7, 0.95), (0.4, 80, 0.3), 50, charger.root), 14)       # 4 the bridge nears
 C.cut(C.camera("cam5_brake", tuple(road_path.point(D + 132, 3.6, 0.4)),                   # 5 Charger brakes
                tuple(road_path.point(D + 112, 2.0, 0.6)), 35), 19)

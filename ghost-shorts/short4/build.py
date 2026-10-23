@@ -20,8 +20,8 @@ C.world((0.003, 0.004, 0.007), 1.0)
 F = C.f
 
 # --------------------------------------------------------------- garage
-concrete = C.mat("garage_concrete", (0.09, 0.085, 0.08), 0.0, 0.85)
-floor_m = C.mat("garage_floor", (0.05, 0.05, 0.05), 0.0, 0.35)      # oily, a bit glossy
+concrete = C.surface("garage_concrete", (0.07, 0.066, 0.06), (0.14, 0.13, 0.12), (0.6, 0.95), 0.3, 0.4, 10)
+floor_m = C.surface("garage_floor", (0.035, 0.035, 0.035), (0.08, 0.075, 0.07), (0.08, 0.6), 0.15, 0.35, 20, puddles=True)  # oily patches
 C.box("floor", (14, 18, 0.2), (0, 0, -0.1), floor_m)
 C.box("ceiling", (14, 18, 0.2), (0, 0, 5.1), concrete)
 C.box("back_wall", (14, 0.3, 5), (0, -9, 2.5), concrete)
@@ -149,7 +149,7 @@ c2 = C.camera("cam2_push", (0, 6, 1.6), (0, -1, 0.9), 35)                       
 C.key(c2, "location", [(F(4), (0, 6, 1.6)), (F(10), (0, 3.6, 1.35))])
 C.cut(c2, 4)
 C.cut(C.camera("cam3_side", (3.4, -0.2, 0.9), (0.9, -1.2, 0.75), 35), 10)               # 3 light line
-C.cut(C.camera("cam4_dash", (DASH[0], -1.3, 0.05), DASH, 50), 14)                       # 4 dashboard wakes
+C.cut(C.camera("cam4_dash", (DASH[0] + 0.2, -2.4, 0.05), DASH, 35), 14)                       # 4 dashboard wakes
 c5 = C.camera("cam5_rear", (0.7, -7.2, 0.35), (0.5, -3.6, 0.38), 24)                    # 5 blue flames
 C.shake(c5, 0.03, 1.5, F(18), F(22))
 C.cut(c5, 18)

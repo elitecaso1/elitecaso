@@ -16,8 +16,8 @@ import os
 import random
 import sys
 
+import bpy  # first: bmesh/mathutils come with it when bpy is a pip module
 import bmesh
-import bpy
 from mathutils import Matrix, Vector, noise
 
 FPS = 30
@@ -93,7 +93,7 @@ def setup(name, seconds, preview=False):
     r.fps = FPS // sc.frame_step
     r.use_motion_blur = True
     ee = sc.eevee
-    for attr, val in (("taa_render_samples", 16 if preview else 64),
+    for attr, val in (("taa_render_samples", 16 if preview else 48),
                       ("use_raytracing", True),
                       ("use_gtao", True),
                       ("use_bloom", True),           # legacy Eevee only
@@ -195,6 +195,26 @@ def world(color=(0.004, 0.005, 0.009), strength=1.0, fog=0.0, fog_color=(0.6, 0.
     return w
 
 
+def world_hdri(file, strength=1.0, rot=0.0, fog=0.0, fog_color=(0.6, 0.65, 0.75), **fallback):
+    """HDRI environment from assets/hdri (Poly Haven, CC0); falls back to world() if missing."""
+    path = os.path.join(ASSETS, "hdri", file)
+    if not os.path.exists(path):
+        return world(fog=fog, fog_color=fog_color, **fallback)
+    w = world(fog=fog, fog_color=fog_color)
+    nt = w.node_tree
+    bg = nt.nodes["Background"]
+    env = nt.nodes.new("ShaderNodeTexEnvironment")
+    env.image = bpy.data.images.load(path)
+    tc = nt.nodes.new("ShaderNodeTexCoord")
+    mp = nt.nodes.new("ShaderNodeMapping")
+    mp.inputs["Rotation"].default_value = (0, 0, rot)
+    nt.links.new(tc.outputs["Generated"], mp.inputs["Vector"])
+    nt.links.new(mp.outputs["Vector"], env.inputs["Vector"])
+    nt.links.new(env.outputs["Color"], bg.inputs["Color"])
+    bg.inputs["Strength"].default_value = strength
+    return w
+
+
 def sun(energy=2.0, rot=(0.9, 0.2, 0.6), color=(1, 1, 1)):
     d = bpy.data.lights.new("Sun", "SUN")
     d.energy = energy
@@ -256,6 +276,43 @@ def mat(name, color=(0.5, 0.5, 0.5), metallic=0.0, rough=0.5, coat=0.0, emit=Non
                     setattr(m, attr, val)
                 except Exception:
                     pass
+    return m
+
+
+def surface(name, color, color2=None, rough=(0.45, 0.85), bump=0.25, coarse=0.04, fine=25.0,
+            metallic=0.0, puddles=False):
+    """Procedural PBR-ish surface: large-scale colour/roughness variation + fine grain bump.
+    puddles=True drives roughness from the coarse noise (wet road with glossy patches)."""
+    m = mat(name, color, metallic, rough[0])
+    nt = m.node_tree
+    p = nt.nodes["Principled BSDF"]
+    tc = nt.nodes.new("ShaderNodeTexCoord")
+    big = nt.nodes.new("ShaderNodeTexNoise")
+    big.inputs["Scale"].default_value = coarse
+    big.inputs["Detail"].default_value = 6
+    grain = nt.nodes.new("ShaderNodeTexNoise")
+    grain.inputs["Scale"].default_value = fine
+    grain.inputs["Detail"].default_value = 10
+    grain.inputs["Roughness"].default_value = 0.7
+    for n in (big, grain):
+        nt.links.new(tc.outputs["Object"], n.inputs["Vector"])
+    ramp = nt.nodes.new("ShaderNodeValToRGB")
+    ramp.color_ramp.elements[0].position = 0.35
+    ramp.color_ramp.elements[0].color = (*color, 1)
+    ramp.color_ramp.elements[1].position = 0.65
+    ramp.color_ramp.elements[1].color = (*(color2 or [c * 1.6 for c in color]), 1)
+    nt.links.new(big.outputs["Fac"], ramp.inputs["Fac"])
+    nt.links.new(ramp.outputs["Color"], p.inputs["Base Color"])
+    rr = nt.nodes.new("ShaderNodeMapRange")
+    rr.inputs["From Min"].default_value = 0.4 if puddles else 0.3
+    rr.inputs["From Max"].default_value = 0.55 if puddles else 0.7
+    rr.inputs["To Min"].default_value, rr.inputs["To Max"].default_value = rough
+    nt.links.new((big if puddles else grain).outputs["Fac"], rr.inputs["Value"])
+    nt.links.new(rr.outputs["Result"], p.inputs["Roughness"])
+    bm = nt.nodes.new("ShaderNodeBump")
+    bm.inputs["Strength"].default_value = bump
+    nt.links.new(grain.outputs["Fac"], bm.inputs["Height"])
+    nt.links.new(bm.outputs["Normal"], p.inputs["Normal"])
     return m
 
 
@@ -672,43 +729,181 @@ WHEEL_R = 0.36
 Z0 = 0.30
 
 
-class Car:
-    """Low-poly hard-surface car built from boxes. Front = +Y, origin on the ground.
+def _is_ferrari_wheel(n):
+    return n.split(".")[0] in ("tire", "wheel", "brake", "nuts", "centre") or n.startswith("rim_")
 
-    If assets/<style>.glb exists it is imported instead of the procedural body
-    (scale it to ~5 m long, facing +Y, wheels on Z=0 before exporting).
+
+def _is_concept_wheel(n):
+    return n in ("Mesh_89", "Mesh_91", "Mesh_93", "Mesh_95") or "Rim" in n or "BrakeDisc" in n
+
+
+# Real car models (assets/fetch_assets.sh). Missing file -> procedural box car.
+MODELS = {
+    "ferrari": dict(file="ferrari.glb", flip=False, paint=("Body_Color",), head=("Projector_Glass",),
+                    tail=("Taillight_Glass",), glass=("Glass_Gray",), wheel=_is_ferrari_wheel),
+    "concept": dict(file="CarConcept.glb", flip=True, paint=("Paint",), head=("Headlight",),
+                    tail=("Brakelight",), glass=("Glass", "Mirror"), wheel=_is_concept_wheel),
+}
+STYLE_MODEL = {"charger": "ferrari", "roadster": "ferrari", "pickup": "ferrari", "ghost": "concept"}
+
+
+def _principled(m):
+    if not m or not m.use_nodes:
+        return None
+    return next((n for n in m.node_tree.nodes if n.type == "BSDF_PRINCIPLED"), None)
+
+
+def _unlink(m, sock):
+    for l in list(m.node_tree.links):
+        if l.to_socket == sock:
+            m.node_tree.links.remove(l)
+
+
+class Car:
+    """Car rig: root empty (Follow Path), body, 4 spinning wheel pivots, head/tail light materials,
+    real spot lights. Front = +Y, origin on the ground.
+
+    Uses the real glTF model for its style when assets/ has it, else a low-poly box car.
     """
 
     def __init__(self, name, style="charger", head_color=(1.0, 0.92, 0.75), head_on=True,
                  head_strength=40.0, tail_strength=12.0, spots=True):
         s = STYLES[style]
-        self.name, self.s = name, s
-        L, W = s["L"], s["W"]
+        self.name, self.s, self.style = name, s, style
         self.root = empty(name)
+        self.wheels = []
+        self.wheel_r = WHEEL_R
+        spec = MODELS.get(STYLE_MODEL.get(style, ""))
+        path = os.path.join(ASSETS, spec["file"]) if spec else ""
+        if spec and os.path.exists(path):
+            L, W, zl_f, zl_r = self._import_model(spec, path, s, head_color, head_on, head_strength, tail_strength)
+        else:
+            L, W, zl_f, zl_r = self._procedural(s, head_color, head_on, head_strength, tail_strength)
+        self.L, self.W = L, W
+        self.spots = []
+        if spots:
+            for sx in (-1, 1):
+                sp = light(f"{name}_spot{sx}", "SPOT", 1800 if head_on else 0, (sx * (W / 2 - 0.36), L / 2 + 0.1, zl_f),
+                           head_color, 0.05, (math.pi / 2 - 0.07, 0, 0), self.root, spot=0.95)
+                self.spots.append(sp)
+        self.exhausts = [Vector((sx * 0.5, -L / 2 - 0.05, Z0 + 0.06)) for sx in (-1, 1)]
+        self.constraint = None
+        self.path = None
+
+    def _import_model(self, spec, path, s, head_color, head_on, head_strength, tail_strength):
+        name = self.name
+        before = set(bpy.data.objects)
+        bpy.ops.import_scene.gltf(filepath=path)
+        new = [o for o in bpy.data.objects if o not in before]
+        holder = empty(name + "_model", parent=self.root)
+        for o in new:
+            if o.parent is None:
+                o.parent = holder
+        if spec["flip"]:
+            holder.rotation_euler.z = math.pi
+        meshes = [o for o in new if o.type == "MESH"]
+        bpy.context.view_layer.update()
+        pts = [o.matrix_world @ Vector(c) for o in meshes for c in o.bound_box]
+        lo = Vector([min(p[i] for p in pts) for i in range(3)])
+        hi = Vector([max(p[i] for p in pts) for i in range(3)])
+        holder.location.z = -lo.z
+        bpy.context.view_layer.update()
+
+        # per-car copies of the materials we restyle / animate
+        made = {}
+
+        def restyle(m):
+            nm = m.name.split(".")[0]
+            if any(nm.startswith(p) for p in spec["paint"]):
+                kind = "paint"
+            elif nm in spec["head"]:
+                kind = "head"
+            elif nm in spec["tail"]:
+                kind = "tail"
+            elif self.style == "ghost" and any(nm.startswith(g) for g in spec["glass"]):
+                kind = "glass"
+            else:
+                return m
+            if kind in made:
+                return made[kind]
+            c = m.copy()
+            c.name = f"{name}_{kind}"
+            p = _principled(c)
+            if p is None:
+                return m
+            if kind == "paint":
+                _unlink(c, p.inputs["Base Color"])
+                p.inputs["Base Color"].default_value = (*s["color"], 1)
+                p.inputs["Metallic"].default_value = s["metal"]
+                p.inputs["Roughness"].default_value = s["rough"]
+                cw = _sock(p, "Coat Weight", "Clearcoat")
+                if cw:
+                    _unlink(c, cw)
+                    cw.default_value = 1.0
+            elif kind == "glass":                       # tinted black: nobody visible inside
+                for sn in ("Transmission Weight", "Transmission"):
+                    if sn in p.inputs:
+                        _unlink(c, p.inputs[sn])
+                        p.inputs[sn].default_value = 0.0
+                _unlink(c, p.inputs["Base Color"])
+                p.inputs["Base Color"].default_value = (0.002, 0.002, 0.003, 1)
+                p.inputs["Roughness"].default_value = 0.02
+                p.inputs["Alpha"].default_value = 1.0
+            else:
+                col = head_color if kind == "head" else (1.0, 0.02, 0.01)
+                ec = _sock(p, "Emission Color", "Emission")
+                es = _sock(p, "Emission Strength")
+                _unlink(c, ec)
+                _unlink(c, es)
+                ec.default_value = (*col, 1)
+                es.default_value = (head_strength if head_on else 0.0) if kind == "head" else tail_strength
+            made[kind] = c
+            return c
+
+        for o in meshes:
+            for slot in o.material_slots:
+                if slot.material:
+                    slot.material = restyle(slot.material)
+        self.paint = made.get("paint") or mat(name + "_paint", s["color"], s["metal"], s["rough"], coat=1.0)
+        self.head = made.get("head") or glow(name + "_head", head_color, head_strength if head_on else 0.0)
+        self.tail = made.get("tail") or glow(name + "_tail", (1.0, 0.02, 0.01), tail_strength)
+
+        # wheel pivots: group wheel parts per corner, spin the pivot about X
+        groups = {}
+        for o in meshes:
+            if spec["wheel"](o.name):
+                c = sum((o.matrix_world @ Vector(v) for v in o.bound_box), Vector()) / 8
+                groups.setdefault((c.x > 0, c.y > 0), []).append((o, c))
+        for i, (k, parts) in enumerate(sorted(groups.items())):
+            centre = sum((c for _, c in parts), Vector()) / len(parts)
+            pivot = empty(f"{name}_wheel{i}", centre, self.root)
+            bpy.context.view_layer.update()
+            for o, _ in parts:
+                mw = o.matrix_world.copy()
+                o.parent = pivot
+                o.matrix_world = mw
+            self.wheels.append(pivot)
+            self.wheel_r = centre.z
+        L, W = hi.y - lo.y, hi.x - lo.x
+        return L, W, (hi.z - lo.z) * 0.5, (hi.z - lo.z) * 0.6
+
+    def _procedural(self, s, head_color, head_on, head_strength, tail_strength):
+        name = self.name
+        L, W = s["L"], s["W"]
         self.paint = mat(name + "_paint", s["color"], s["metal"], s["rough"], coat=1.0)
         glass = mat(name + "_glass", (0.005, 0.006, 0.008), 0.0, 0.03)
         rubber = mat(name + "_rubber", (0.02, 0.02, 0.02), 0.0, 0.8)
         rim = mat(name + "_rim", (0.6, 0.6, 0.62), 1.0, 0.25)
         self.head = glow(name + "_head", head_color, head_strength if head_on else 0.0)
         self.tail = glow(name + "_tail", (1.0, 0.02, 0.01), tail_strength)
-
-        glb = os.path.join(ASSETS, style + ".glb")
-        if os.path.exists(glb):
-            before = set(bpy.data.objects)
-            bpy.ops.import_scene.gltf(filepath=glb)
-            for o in set(bpy.data.objects) - before:
-                if o.parent is None:
-                    o.parent = self.root
-        else:
-            wedge(name + "_body", L, W, s["hf"], s["hr"], Z0, self.paint, self.root, taper=0.08)
-            lb, lt, ch, cy = s["cab"]
-            hb = s["hr"] + (s["hf"] - s["hr"]) * (cy + L / 2) / L
-            prism(name + "_cabin", W * 0.86, lb, W * 0.74, lt, ch, Z0 + hb - 0.04, cy, glass, self.root,
-                  top_shift=-0.15)
-            box(name + "_roof", (W * 0.72, lt * 0.92, 0.04), (0, cy - 0.15, Z0 + hb + ch - 0.02),
-                self.paint, parent=self.root, bevel=0.015)
-            box(name + "_splitter", (W * 0.9, 0.3, 0.06), (0, L / 2 - 0.1, Z0 - 0.02), rubber, parent=self.root)
-        self.wheels = []
+        wedge(name + "_body", L, W, s["hf"], s["hr"], Z0, self.paint, self.root, taper=0.08)
+        lb, lt, ch, cy = s["cab"]
+        hb = s["hr"] + (s["hf"] - s["hr"]) * (cy + L / 2) / L
+        prism(name + "_cabin", W * 0.86, lb, W * 0.74, lt, ch, Z0 + hb - 0.04, cy, glass, self.root,
+              top_shift=-0.15)
+        box(name + "_roof", (W * 0.72, lt * 0.92, 0.04), (0, cy - 0.15, Z0 + hb + ch - 0.02),
+            self.paint, parent=self.root, bevel=0.015)
+        box(name + "_splitter", (W * 0.9, 0.3, 0.06), (0, L / 2 - 0.1, Z0 - 0.02), rubber, parent=self.root)
         for sx in (-1, 1):
             for sy in (-1, 1):
                 w = cylinder(f"{name}_wheel{len(self.wheels)}", WHEEL_R, 0.28,
@@ -723,15 +918,7 @@ class Car:
                 self.head, parent=self.root)
             box(f"{name}_taillight{sx}", (0.55, 0.06, 0.08), (sx * (W / 2 - 0.40), -L / 2 - 0.005, zl_r),
                 self.tail, parent=self.root)
-        self.spots = []
-        if spots:
-            for sx in (-1, 1):
-                sp = light(f"{name}_spot{sx}", "SPOT", 1800 if head_on else 0, (sx * (W / 2 - 0.36), L / 2 + 0.1, zl_f),
-                           head_color, 0.05, (math.pi / 2 - 0.07, 0, 0), self.root, spot=0.95)
-                self.spots.append(sp)
-        self.exhausts = [Vector((sx * 0.5, -L / 2 - 0.05, Z0 + 0.06)) for sx in (-1, 1)]
-        self.constraint = None
-        self.path = None
+        return L, W, zl_f, zl_r
 
     # -- lights -------------------------------------------------------
     def headlights(self, pairs, strength=40.0, spot=1800.0):
@@ -740,7 +927,7 @@ class Car:
         for sp in self.spots:
             key(sp.data, "energy", [(fr, v * spot) for fr, v in pairs])
 
-    def rim_light(self, energy=300, color=(0.6, 0.7, 1.0)):
+    def rim_light(self, energy=40, color=(0.6, 0.7, 1.0)):
         return light(self.name + "_rim", "AREA", energy, (0, 0, 3.2), color, 4.0, parent=self.root)
 
     # -- motion -------------------------------------------------------
@@ -761,7 +948,7 @@ class Car:
         set_interp(self.root, interp, "offset_factor")
         for w in self.wheels:
             for fr, d in keys:
-                w.rotation_euler.x = -d / WHEEL_R
+                w.rotation_euler.x = -d / self.wheel_r
                 w.keyframe_insert("rotation_euler", index=0, frame=fr)
             set_interp(w, interp)
 
@@ -855,7 +1042,7 @@ def particles(name, emitter, inst, count, f0, f1, life, vel=(0, 0, 0), normal=0.
 def instance(name, kind, m, size):
     """Particle instance (lives in the excluded _instances collection)."""
     c = hidden_collection()
-    o = sphere(name, size, m=m, segs=8) if kind == "sphere" else box(name, size, m=m)
+    o = sphere(name, size, m=m, segs=16) if kind == "sphere" else box(name, size, m=m)
     for col in list(o.users_collection):
         col.objects.unlink(o)
     c.objects.link(o)
@@ -863,17 +1050,32 @@ def instance(name, kind, m, size):
 
 
 def rain(parent, f0, f1, area=(40, 70), height=14, ahead=10, count=40000, origin=(0, 0, 0), name="rain"):
-    m = bpy.data.materials.get("rain_mat") or glow("rain_mat", (0.55, 0.65, 0.85), 0.6)
-    drop = bpy.data.objects.get("raindrop") or instance("raindrop", "box", m, (0.5, 0.012, 0.012))
+    m = bpy.data.materials.get("rain_mat") or glow("rain_mat", (0.55, 0.65, 0.85), 0.35)
+    drop = bpy.data.objects.get("raindrop") or instance("raindrop", "box", m, (0.3, 0.004, 0.004))
     loc = (origin[0], origin[1] + ahead, origin[2] + height)
     em = plane(name + "_emitter", area[0], area[1], loc, rot=(math.pi, 0, 0), parent=parent)
     return particles(name, em, drop, count, f0, f1, 22, vel=(0, 0, 0), normal=18.0, gravity=1.0,
                      size=1.0, rand=0.5, align_vel=True, rand_vel=0.1)
 
 
+def soft_mat(name, color, alpha):
+    """Smoke puff: opacity falls off towards the silhouette so overlapping spheres read as soft smoke."""
+    m = mat(name, color, 0, 1.0, alpha=alpha)
+    nt = m.node_tree
+    p = nt.nodes["Principled BSDF"]
+    lw = nt.nodes.new("ShaderNodeLayerWeight")
+    lw.inputs["Blend"].default_value = 0.5
+    mr = nt.nodes.new("ShaderNodeMapRange")
+    mr.inputs["From Min"].default_value, mr.inputs["From Max"].default_value = 0.0, 1.0
+    mr.inputs["To Min"].default_value, mr.inputs["To Max"].default_value = alpha, 0.0
+    nt.links.new(lw.outputs["Facing"], mr.inputs["Value"])
+    nt.links.new(mr.outputs["Result"], p.inputs["Alpha"])
+    return m
+
+
 def smoke(name, loc, parent, f0, f1, count=600, color=(0.55, 0.55, 0.58), vel=(0, -3, 1.2), size=0.6,
           life=45, alpha=0.12, emitter_size=0.3):
-    m = mat(name + "_mat", color, 0, 1.0, alpha=alpha)
+    m = soft_mat(name + "_mat", color, alpha)
     puff = instance(name + "_puff", "sphere", m, 1.0)
     em = plane(name + "_emitter", emitter_size, emitter_size, loc, parent=parent)
     return particles(name, em, puff, count, f0, f1, life, vel=vel, gravity=-0.05, size=size, rand=0.6,

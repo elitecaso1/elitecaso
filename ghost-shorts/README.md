@@ -16,6 +16,7 @@ camera — koi insaan nahi.
 
 ```bash
 cd ghost-shorts
+./assets/fetch_assets.sh                      # ek baar: car models + HDRIs (credits: assets/CREDITS.md)
 blender -b -P short1/build.py                 # short1/short1.blend banata hai
 blender -b -P short1/build.py -- --preview    # 540x960, har 2nd frame -> renders/short1_preview.mp4
 blender -b -P short1/build.py -- --render     # final -> renders/short1.mp4

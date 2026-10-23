@@ -14,7 +14,7 @@ NAME = "short3"
 opts = C.cli()
 C.reset()
 sc = C.setup(NAME, 40, opts["preview"])
-C.world((0.012, 0.016, 0.03), 1.0, top=(0.025, 0.035, 0.08))
+C.world_hdri("moonless_golf_1k.hdr", 0.8, 3.6, color=(0.012, 0.016, 0.03), top=(0.025, 0.035, 0.08))
 C.sun(0.35, (1.0, 0.1, 2.4), (0.65, 0.75, 1.0))          # moonlight over the khai
 F = C.f
 
@@ -23,7 +23,7 @@ ROAD = [(0, -20, 100), (0, 150, 100), (20, 182, 92.5), (40, 150, 85), (40, 0, 85
         (60, -32, 77.5), (80, 0, 70), (80, 150, 70), (100, 182, 62.5), (120, 150, 55),
         (120, 80, 55), (116, 50, 55), (110, 20, 55), (110, -40, 55)]
 road_path = C.Path("mountain_road", ROAD)
-asphalt = C.mat("asphalt", (0.02, 0.02, 0.022), 0.0, 0.5)
+asphalt = C.surface("asphalt", (0.018, 0.018, 0.02), (0.04, 0.04, 0.042), (0.35, 0.75), 0.2, 0.06, 40)
 paint = C.mat("paint", (0.85, 0.82, 0.7), 0.0, 0.5)
 C.road("road", road_path, 8.0, asphalt)
 C.dashes("center", road_path, 0.0, 9, 3, 0.14, paint)
@@ -54,7 +54,7 @@ def height(x, y):
     return z + amp * C.fbm(x, y, 0.03)
 
 
-rock = C.mat("rock", (0.05, 0.05, 0.055), 0.0, 0.85)
+rock = C.surface("rock", (0.035, 0.035, 0.04), (0.10, 0.095, 0.09), (0.6, 0.95), 0.6, 0.05, 4)
 C.grid("mountain", 600, 520, 150, 130, height, (130, 50, 0), rock)
 
 # railing along the khai side of the last leg
@@ -67,7 +67,7 @@ for i, y in enumerate(range(-40, 151, 3)):
 C.box("rail", (0.08, 191, 0.28), (RAIL_X, 55.5, 55.85), steel)
 
 # clouds filling the khai
-C.fog_box("clouds", (320, 520, 90), (290, 30, -15), 0.12, (0.85, 0.88, 0.95), True, 0.018)
+C.fog_box("clouds", (320, 520, 90), (290, 30, -15), 0.35, (0.9, 0.92, 1.0), True, 0.025)
 
 # --------------------------------------------------------------- cars
 d_h1 = road_path.nearest(ROAD[2])
@@ -115,20 +115,20 @@ C.cut(c1, 0)
 # 2 0:03–0:09  drone above hairpin 1, drift
 C.cut(C.camera("cam2_drone", (20, 140, 128), (20, 170, 93), 24), 3)
 # 3 0:09–0:13  tyre marks and dust settling
-C.cut(C.camera("cam3_marks", tuple(road_path.point(d_h1 + 30, 6, 0.5)), tuple(road_path.point(d_h1 + 8, 2, 0)), 28), 9)
+C.cut(C.camera("cam3_marks", tuple(road_path.point(d_h1 + 30, 3.2, 0.4)), tuple(road_path.point(d_h1 + 8, 2, 0)), 28), 9)
 # 4 0:13–0:18  Roadster POV round hairpin 2 — the GHOST is already waiting
 C.cut(C.camera("cam4_pov", (0.35, 0.6, 1.15), (0.35, 30, 0.9), 24, roadster.root), 13)
 # 5 0:18–0:21  GHOST front, blue headlights ignite
-C.cut(C.camera("cam5_lights", tuple(road_path.point(PARK + 6, -2.4, 0.7)), tuple(road_path.point(PARK, -2, 0.65)), 50), 18)
+C.cut(C.camera("cam5_lights", (0.5, 6.5, 0.7), (0, 0, 0.6), 50, ghost.root), 18)
 # 6 0:21–0:30  side by side through the bends, three angles
-C.cut(C.camera("cam6a_side", (-4.5, 1.5, 1.2), (2, 0, 0.8), 30, ghost.root), 21)
+C.cut(C.camera("cam6a_side", (9, 2, 1.6), (2.5, 0, 0.7), 30, ghost.root), 21)
 C.cut(C.camera("cam6b_front", (-0.5, 11, 1.0), (-2, 0, 0.7), 35, roadster.root), 24)
 C.cut(C.camera("cam6c_drone", (2, -16, 9), (2, 10, 0), 28, ghost.root), 27)
 # 7 0:30–0:35  over the railing, slow-mo flight
-C.cut(C.camera("cam7_flight", (146, 66, 63), (128, 26, 56.5), 35), 30)
+C.cut(C.camera("cam7_flight", (146, 66, 63), (128, 26, 56.5), 50), 30)
 # 8 0:35–0:40  over the Roadster: only clouds below + title
 khai = C.target("khai", (185, -45, 15))
-c8 = C.camera("cam8_over", (0.6, -6, 3.0), khai, 30, roadster.root)
+c8 = C.camera("cam8_over", (3.5, 1.0, 2.6), khai, 30, roadster.root)
 C.cut(c8, 35)
 title_m = C.glow("title_m", (0.4, 0.6, 1.0), 0.0)
 C.text("title", "THE GHOST", (0, 0.3, -3), 0.24, title_m, rot=(0, 0, 0), parent=c8)
