@@ -14,7 +14,7 @@ NAME = "short1"
 opts = C.cli()
 C.reset()
 sc = C.setup(NAME, 35, opts["preview"])
-C.world_hdri("moonless_golf_1k.hdr", 0.5, 1.2, color=(0.003, 0.004, 0.008), top=(0.010, 0.014, 0.028))
+C.world_hdri("moonless_golf_1k.hdr", 0.6, 1.2, color=(0.003, 0.004, 0.008), top=(0.010, 0.014, 0.028))
 C.sun(0.06, (1.1, 0.0, 0.9), (0.6, 0.7, 1.0))           # moonlight
 
 # --------------------------------------------------------------- world

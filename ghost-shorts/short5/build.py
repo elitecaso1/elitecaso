@@ -16,7 +16,7 @@ NAME = "short5"
 opts = C.cli()
 C.reset()
 sc = C.setup(NAME, 45, opts["preview"])
-C.world_hdri("quarry_01_1k.hdr", 1.0, 0.0, color=(0.95, 0.5, 0.25), top=(0.12, 0.2, 0.42))
+C.world_hdri("wasteland_clouds_puresky_2k.hdr", 1.0, 0.0, color=(0.95, 0.5, 0.25), top=(0.12, 0.2, 0.42))
 C.sun(4.5, (1.42, 0.0, 2.6), (1.0, 0.72, 0.48))          # low sunset sun
 F = C.f
 

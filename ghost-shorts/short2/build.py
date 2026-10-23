@@ -15,7 +15,7 @@ NAME = "short2"
 opts = C.cli()
 C.reset()
 sc = C.setup(NAME, 30, opts["preview"])
-C.world_hdri("moonless_golf_1k.hdr", 0.5, 0.0, fog=0.004, fog_color=(0.55, 0.6, 0.7), color=(0.004, 0.005, 0.009), top=(0.01, 0.012, 0.025))
+C.world_hdri("st_peters_square_night_2k.hdr", 0.7, 0.0, color=(0.004, 0.005, 0.009), top=(0.01, 0.012, 0.025))
 F = C.f
 
 # --------------------------------------------------------------- city block

@@ -737,14 +737,52 @@ def _is_concept_wheel(n):
     return n in ("Mesh_89", "Mesh_91", "Mesh_93", "Mesh_95") or "Rim" in n or "BrakeDisc" in n
 
 
+def _is_challenger_wheel(n):
+    return n.split(".")[0] in ("Cylinder", "hubcap", "wheel") and n != "Cylinder.002" and not n.startswith("Cylinder.0")
+
+
+def _is_supra_wheel(n):
+    return n in ("Object_11", "Object_14")
+
+
 # Real car models (assets/fetch_assets.sh). Missing file -> procedural box car.
+# scale: model units -> metres; split: wheel meshes that hold all four wheels get cut per corner.
 MODELS = {
-    "ferrari": dict(file="ferrari.glb", flip=False, paint=("Body_Color",), head=("Projector_Glass",),
+    "challenger": dict(file="challenger.glb", flip=False, scale=0.76, paint=("paint_w_stripes",),
+                       head=("PaletteMaterial007",), tail=("red_reflect",), glass=("PaletteMaterial005", "frontglass"),
+                       wheel=_is_challenger_wheel),
+    "supra": dict(file="supra.glb", flip=True, scale=1.0, paint=(), head=(), tail=(), glass=("windows_int",),
+                  wheel=_is_supra_wheel),
+    "ferrari": dict(file="ferrari.glb", flip=False, scale=1.0, paint=("Body_Color",), head=("Projector_Glass",),
                     tail=("Taillight_Glass",), glass=("Glass_Gray",), wheel=_is_ferrari_wheel),
-    "concept": dict(file="CarConcept.glb", flip=True, paint=("Paint",), head=("Headlight",),
+    "concept": dict(file="CarConcept.glb", flip=True, scale=1.0, paint=("Paint",), head=("Headlight",),
                     tail=("Brakelight",), glass=("Glass", "Mirror"), wheel=_is_concept_wheel),
 }
-STYLE_MODEL = {"charger": "ferrari", "roadster": "ferrari", "pickup": "ferrari", "ghost": "concept"}
+STYLE_MODEL = {"charger": "challenger", "roadster": "supra", "pickup": "ferrari", "ghost": "concept"}
+
+
+def _split_quadrants(o, cx, cy):
+    """Cut one mesh that holds all four wheels into one object per corner."""
+    parts = []
+    mw = o.matrix_world.copy()
+    for qx in (False, True):
+        for qy in (False, True):
+            c = o.copy()
+            c.data = o.data.copy()
+            for col in o.users_collection:
+                col.objects.link(c)
+            bm = bmesh.new()
+            bm.from_mesh(c.data)
+            kill = [v for v in bm.verts if ((mw @ v.co).x > cx) != qx or ((mw @ v.co).y > cy) != qy]
+            bmesh.ops.delete(bm, geom=kill, context="VERTS")
+            bm.to_mesh(c.data)
+            bm.free()
+            if len(c.data.vertices):
+                parts.append(c)
+            else:
+                bpy.data.objects.remove(c)
+    bpy.data.objects.remove(o)
+    return parts
 
 
 def _principled(m):
@@ -801,6 +839,7 @@ class Car:
                 o.parent = holder
         if spec["flip"]:
             holder.rotation_euler.z = math.pi
+        holder.scale = (spec["scale"],) * 3
         meshes = [o for o in new if o.type == "MESH"]
         bpy.context.view_layer.update()
         pts = [o.matrix_world @ Vector(c) for o in meshes for c in o.bound_box]
@@ -869,9 +908,25 @@ class Car:
         self.tail = made.get("tail") or glow(name + "_tail", (1.0, 0.02, 0.01), tail_strength)
 
         # wheel pivots: group wheel parts per corner, spin the pivot about X
+        bpy.context.view_layer.update()
+        cy = (lo.y + hi.y) / 2
+        wheel_objs = []
+        for o in list(meshes):
+            if not spec["wheel"](o.name):
+                continue
+            pts_o = [o.matrix_world @ Vector(v) for v in o.bound_box]
+            span_x = max(p.x for p in pts_o) - min(p.x for p in pts_o)
+            if span_x > 1.0:                                   # all four wheels in one mesh
+                meshes.remove(o)
+                parts = _split_quadrants(o, 0.0, cy)
+                meshes += parts
+                wheel_objs += parts
+            else:
+                wheel_objs.append(o)
+        bpy.context.view_layer.update()
         groups = {}
-        for o in meshes:
-            if spec["wheel"](o.name):
+        for o in wheel_objs:
+            if True:
                 c = sum((o.matrix_world @ Vector(v) for v in o.bound_box), Vector()) / 8
                 groups.setdefault((c.x > 0, c.y > 0), []).append((o, c))
         for i, (k, parts) in enumerate(sorted(groups.items())):
@@ -884,8 +939,16 @@ class Car:
                 o.matrix_world = mw
             self.wheels.append(pivot)
             self.wheel_r = centre.z
-        L, W = hi.y - lo.y, hi.x - lo.x
-        return L, W, (hi.z - lo.z) * 0.5, (hi.z - lo.z) * 0.6
+        L, W, H = hi.y - lo.y, hi.x - lo.x, hi.z - lo.z           # already scaled (world space)
+        if "head" not in made:                                  # model has no separate lamp material
+            for sx in (-1, 1):
+                box(f"{name}_headlight{sx}", (0.32, 0.03, 0.06), (sx * (W / 2 - 0.35), L / 2 - 0.12, H * 0.42),
+                    self.head, parent=self.root)
+        if "tail" not in made:
+            for sx in (-1, 1):
+                box(f"{name}_taillight{sx}", (0.4, 0.03, 0.05), (sx * (W / 2 - 0.35), -L / 2 + 0.1, H * 0.55),
+                    self.tail, parent=self.root)
+        return L, W, H * 0.42, H * 0.55
 
     def _procedural(self, s, head_color, head_on, head_strength, tail_strength):
         name = self.name

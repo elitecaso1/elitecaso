@@ -16,7 +16,7 @@ NAME = "short4"
 opts = C.cli()
 C.reset()
 sc = C.setup(NAME, 35, opts["preview"])
-C.world((0.003, 0.004, 0.007), 1.0)
+C.world_hdri("autoshop_01_2k.hdr", 0.35, 0.0, color=(0.003, 0.004, 0.007))
 F = C.f
 
 # --------------------------------------------------------------- garage
