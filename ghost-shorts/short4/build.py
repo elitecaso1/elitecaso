@@ -46,18 +46,18 @@ for i in range(3):
 # flickering tube light
 tube_m = C.glow("tube_m", (0.85, 0.95, 1.0), 25.0)
 C.cylinder("tube", 0.04, 1.6, (0, -1, 4.85), tube_m, axis="X", segments=12)
-tube = C.light("tube_light", "AREA", 220, (0, -1, 4.75), (0.85, 0.95, 1.0), 1.6)
+tube = C.light("tube_light", "AREA", 450, (0, -1, 4.75), (0.85, 0.95, 1.0), 1.6)
 tube.data.shape = "RECTANGLE"
 tube.data.size, tube.data.size_y = 1.6, 0.15
 pairs = []
 t = 0.0
 while t < 35:
-    on = random.random() < (0.45 if t < 4 else 0.93)
+    on = t < 0.4 or random.random() < (0.5 if t < 4 else 0.93)
     pairs.append((F(t), 1.0 if on else 0.0))
     t += random.uniform(0.06, 0.25) if t < 4 else random.uniform(0.4, 2.0)
-C.key(tube.data, "energy", [(fr, 220 * v) for fr, v in pairs], "CONSTANT")
+C.key(tube.data, "energy", [(fr, 450 * v) for fr, v in pairs], "CONSTANT")
 C.key_emit(tube_m, [(fr, 25 * v) for fr, v in pairs], "CONSTANT")
-C.light("bounce", "POINT", 25, (0, 5, 2.5), (0.5, 0.55, 0.7), 1.0)
+C.light("bounce", "AREA", 120, (0, 0, 4.9), (0.55, 0.6, 0.75), 8.0)
 
 # street outside the shutter
 C.box("street", (200, 40, 0.2), (0, 30, -0.12), C.mat("street_m", (0.02, 0.02, 0.022), 0, 0.3))
@@ -82,15 +82,15 @@ ghost.headlights([(F(0), 0), (F(14.4), 0), (F(14.8), 1.0)], strength=45, spot=22
 C.key_emit(ghost.tail, [(F(0), 0), (F(14.4), 0), (F(14.8), 12)])
 
 cloth_m = C.mat("cloth", (0.16, 0.15, 0.13), 0.0, 0.95)
-cloth = C.box("cloth", (2.35, 5.3, 1.5), (0, -1, 0.78), cloth_m)
+cloth = C.box("cloth", (2.95, 4.9, 1.45), (0, -1, 0.72), cloth_m)
 cloth.modifiers.new("sub", "SUBSURF").levels = 3
 tex = C.bpy.data.textures.new("cloth_wrinkles", "CLOUDS")
 tex.noise_scale = 0.35
 disp = cloth.modifiers.new("wrinkles", "DISPLACE")
 disp.texture, disp.strength = tex, 0.12
-C.key(cloth, "location", [(F(4), (0, -1, 0.78)), (F(7), (0, -2.6, 0.7)), (F(10), (0, -6.3, 0.25))])
-C.key(cloth, "rotation_euler", [(F(4), (0, 0, 0)), (F(10), (-0.25, 0, 0.08))])
-C.key(cloth, "scale", [(F(4), (1, 1, 1)), (F(10), (1.05, 0.6, 0.25))])
+C.key(cloth, "location", [(F(4), (0, -1, 0.72)), (F(7), (1.6, -1.1, 0.62)), (F(10), (4.3, -1.2, 0.2))])
+C.key(cloth, "rotation_euler", [(F(4), (0, 0, 0)), (F(10), (0, 0.35, 0.1))])
+C.key(cloth, "scale", [(F(4), (1, 1, 1)), (F(10), (0.55, 1.0, 0.25))])
 
 # light line sweeping along the body
 sweep = C.light("sweep", "AREA", 400, (2.6, -4.5, 1.0), (0.8, 0.9, 1.0), 0.1, rot=(0, math.pi / 2, 0))

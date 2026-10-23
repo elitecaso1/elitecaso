@@ -16,7 +16,7 @@ NAME = "short5"
 opts = C.cli()
 C.reset()
 sc = C.setup(NAME, 45, opts["preview"])
-C.world_hdri("venice_sunset_1k.hdr", 1.0, 0.0, fog=0.0015, fog_color=(1.0, 0.7, 0.45), color=(0.95, 0.5, 0.25), top=(0.12, 0.2, 0.42))
+C.world_hdri("quarry_01_1k.hdr", 1.0, 0.0, color=(0.95, 0.5, 0.25), top=(0.12, 0.2, 0.42))
 C.sun(4.5, (1.42, 0.0, 2.6), (1.0, 0.72, 0.48))          # low sunset sun
 F = C.f
 
@@ -37,7 +37,7 @@ def ground(x, y):
 
 
 C.grid("desert", 2000, 2400, 200, 240, ground, (0, 0, 0), sand)
-for i in range(7):                                        # far mesas
+for i in range(0):                                        # far mesas (HDRI quarry gives the backdrop)
     x = random.choice((-1, 1)) * random.uniform(300, 900)
     y = random.uniform(-400, 2200)
     w, d, h = random.uniform(80, 220), random.uniform(80, 220), random.uniform(40, 120)
